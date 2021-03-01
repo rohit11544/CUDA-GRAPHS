@@ -30,5 +30,5 @@ These are the improvments in excution time with cuda graphs (Cuda Graph API) for
 | Convolution  |         12.116               |         11.779               |
 
 * This repository contains the cuda code in c++ for  the above cuda graphs. 
-* And also the kernal runtime screenshots are in profile folder.
+* And also the kernal runtime screenshots are in profile folder. 
 
