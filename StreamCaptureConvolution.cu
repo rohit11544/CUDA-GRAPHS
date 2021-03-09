@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <iostream>
+#include <helper_cuda.h>
 #define GRAPH_LAUNCH_ITERATIONS  300
 
 using std::cout;
@@ -61,39 +62,39 @@ void StreamCaptureConvolution(int* h_array, int* h_mask, int* h_result, int* d_a
     cudaGraph_t graph;
     int result = 0;
 
-    cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&stream2, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking);
+    checkCudaErrors(cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking));
+    checkCudaErrors(cudaStreamCreateWithFlags(&stream2, cudaStreamNonBlocking));
+    checkCudaErrors(cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking));
 
-    cudaEventCreate(&forkStreamEvent);
-    cudaEventCreate(&memcpyEvent);
+    checkCudaErrors(cudaEventCreate(&forkStreamEvent));
+    checkCudaErrors(cudaEventCreate(&memcpyEvent));
 
-    cudaStreamBeginCapture(stream1, cudaStreamCaptureModeGlobal);
-    cudaEventRecord(forkStreamEvent, stream1);
-    cudaStreamWaitEvent(stream2, forkStreamEvent);
+    checkCudaErrors(cudaStreamBeginCapture(stream1, cudaStreamCaptureModeGlobal));
+    checkCudaErrors(cudaEventRecord(forkStreamEvent, stream1));
+    checkCudaErrors(cudaStreamWaitEvent(stream2, forkStreamEvent));
 
-    cudaMemcpyAsync(d_array, h_array, bytes_n, cudaMemcpyDefault, stream2);
-    cudaEventRecord(memcpyEvent, stream2);
-    cudaStreamWaitEvent(stream1, memcpyEvent);
+    checkCudaErrors(cudaMemcpyAsync(d_array, h_array, bytes_n, cudaMemcpyDefault, stream2));
+    checkCudaErrors(cudaEventRecord(memcpyEvent, stream2));
+    checkCudaErrors(cudaStreamWaitEvent(stream1, memcpyEvent));
 
     convolution_1d << <GRID, THREADS, 0, stream1 >> > (d_array, d_result, n);
 
-    cudaMemcpyAsync(h_result, d_result, bytes_n, cudaMemcpyDefault, stream1);
+    checkCudaErrors(cudaMemcpyAsync(h_result, d_result, bytes_n, cudaMemcpyDefault, stream1));
 
-    cudaStreamEndCapture(stream1, &graph);
+    checkCudaErrors(cudaStreamEndCapture(stream1, &graph));
 
     cudaGraphNode_t* nodes = NULL;
     size_t numNodes = 0;
-    cudaGraphGetNodes(graph, nodes, &numNodes);
+    checkCudaErrors(cudaGraphGetNodes(graph, nodes, &numNodes));
     cout << "Num of nodes in the graph created using stream capture API = " << numNodes << endl;
 
     cudaGraphExec_t graphExec;
-    cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 
     cudaGraph_t clonedGraph;
     cudaGraphExec_t clonedGraphExec;
-    cudaGraphClone(&clonedGraph, graph);
-    cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphClone(&clonedGraph, graph));
+    checkCudaErrors(cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0));
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -102,8 +103,8 @@ void StreamCaptureConvolution(int* h_array, int* h_mask, int* h_result, int* d_a
 
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(graphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_array, h_mask, h_result, n);
     }
 
@@ -115,25 +116,25 @@ void StreamCaptureConvolution(int* h_array, int* h_mask, int* h_result, int* d_a
     cout << "\nVerifying Cloned Graph ... " << endl;
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(clonedGraphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(clonedGraphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_array, h_mask, h_result, n);
     }
     cout << "Done! Verifyied successfully" << endl;
 
     cout << "\nTime taken by using CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
-    
-    cudaGraphExecDestroy(graphExec);
-    cudaGraphExecDestroy(clonedGraphExec);
-    cudaGraphDestroy(graph);
-    cudaGraphDestroy(clonedGraph);
-    cudaStreamDestroy(stream1);
-    cudaStreamDestroy(stream2);
-    cudaStreamDestroy(streamForGraph);
-    cudaEventDestroy(forkStreamEvent);
-    cudaEventDestroy(memcpyEvent);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+
+    checkCudaErrors(cudaGraphExecDestroy(graphExec));
+    checkCudaErrors(cudaGraphExecDestroy(clonedGraphExec));
+    checkCudaErrors(cudaGraphDestroy(graph));
+    checkCudaErrors(cudaGraphDestroy(clonedGraph));
+    checkCudaErrors(cudaStreamDestroy(stream1));
+    checkCudaErrors(cudaStreamDestroy(stream2));
+    checkCudaErrors(cudaStreamDestroy(streamForGraph));
+    checkCudaErrors(cudaEventDestroy(forkStreamEvent));
+    checkCudaErrors(cudaEventDestroy(memcpyEvent));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
 }
 
@@ -162,9 +163,9 @@ int main() {
     int* h_result = new int[n];
 
     int* d_array, * d_result;
-    cudaMalloc(&d_array, bytes_n);
-    cudaMalloc(&d_result, bytes_n);
-    
+    checkCudaErrors(cudaMalloc(&d_array, bytes_n));
+    checkCudaErrors(cudaMalloc(&d_result, bytes_n));
+
     initialize_vector(h_array, n);
     initialize_vector(h_mask, MASK_LENGTH);
     cudaMemcpyToSymbol(mask, h_mask, bytes_m);
@@ -174,27 +175,27 @@ int main() {
     int GRID = (n + THREADS - 1) / THREADS;
 
     cout << "Normal Convolution" << endl;
-    
+
     cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    cudaEventRecord(start);
-    
+    checkCudaErrors(cudaEventCreate(&start));
+    checkCudaErrors(cudaEventCreate(&stop));
+    checkCudaErrors(cudaEventRecord(start));
+
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++) {
         NormalConvolution(h_array, h_mask, h_result, d_array, d_result, n, THREADS, GRID, bytes_n);
-        cudaStreamSynchronize(0);
+        checkCudaErrors(cudaStreamSynchronize(0));
     }
-    cudaDeviceSynchronize();
-    cudaEventRecord(stop);
-    cudaEventSynchronize(stop);
+    checkCudaErrors(cudaDeviceSynchronize());
+    checkCudaErrors(cudaEventRecord(stop));
+    checkCudaErrors(cudaEventSynchronize(stop));
     float milliseconds = 0;
-    cudaEventElapsedTime(&milliseconds, start, stop);
+    checkCudaErrors(cudaEventElapsedTime(&milliseconds, start, stop));
     cout << "\nTime taken without CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
-    
+
     cout << "----------------------------------------------------" << endl;
-    
+
     cout << "Convolution using CUDA GRAPHS (Stream Capture)" << endl;
-    
+
     StreamCaptureConvolution(h_array, h_mask, h_result, d_array, d_result, n, THREADS, GRID, bytes_n, bytes_m);
 
     cout << "----------------------------------------------------\n" << endl;
@@ -203,10 +204,10 @@ int main() {
     delete[] h_array;
     delete[] h_result;
     delete[] h_mask;
-    cudaFree(d_result);
-    cudaFree(d_array);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaFree(d_result));
+    checkCudaErrors(cudaFree(d_array));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
     return 0;
 }
