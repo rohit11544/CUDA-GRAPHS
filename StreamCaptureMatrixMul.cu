@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cuda_runtime.h>
+#include <helper_cuda.h>
 #include <device_launch_parameters.h>
 #define GRAPH_LAUNCH_ITERATIONS  3
 
@@ -50,53 +51,53 @@ void StreamCaptureMatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, in
     cudaGraph_t graph;
     int result = 0;
 
-    cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&stream2, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&stream3, cudaStreamNonBlocking);
-    cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking);
+    checkCudaErrors(cudaStreamCreateWithFlags(&stream1, cudaStreamNonBlocking));
+    checkCudaErrors(cudaStreamCreateWithFlags(&stream2, cudaStreamNonBlocking));
+    checkCudaErrors(cudaStreamCreateWithFlags(&stream3, cudaStreamNonBlocking));
+    checkCudaErrors(cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking));
 
-    cudaEventCreate(&forkStreamEvent);
-    cudaEventCreate(&memcpyEvent);
-    cudaEventCreate(&memsetEvent);
+    checkCudaErrors(cudaEventCreate(&forkStreamEvent));
+    checkCudaErrors(cudaEventCreate(&memcpyEvent));
+    checkCudaErrors(cudaEventCreate(&memsetEvent));
 
-    cudaStreamBeginCapture(stream1, cudaStreamCaptureModeGlobal);
-    cudaEventRecord(forkStreamEvent, stream1);
-    cudaStreamWaitEvent(stream2, forkStreamEvent);
-    cudaStreamWaitEvent(stream3, forkStreamEvent);
+    checkCudaErrors(cudaStreamBeginCapture(stream1, cudaStreamCaptureModeGlobal));
+    checkCudaErrors(cudaEventRecord(forkStreamEvent, stream1));
+    checkCudaErrors(cudaStreamWaitEvent(stream2, forkStreamEvent));
+    checkCudaErrors(cudaStreamWaitEvent(stream3, forkStreamEvent));
 
-    cudaMemcpyAsync(d_a, h_a, N * N * sizeof(int), cudaMemcpyDefault, stream1);
-    cudaMemcpyAsync(d_b, h_b, N * N * sizeof(int), cudaMemcpyDefault, stream2);
-    cudaEventRecord(memcpyEvent, stream2);
-    cudaStreamWaitEvent(stream1, memcpyEvent);
+    checkCudaErrors(cudaMemcpyAsync(d_a, h_a, N * N * sizeof(int), cudaMemcpyDefault, stream1));
+    checkCudaErrors(cudaMemcpyAsync(d_b, h_b, N * N * sizeof(int), cudaMemcpyDefault, stream2));
+    checkCudaErrors(cudaEventRecord(memcpyEvent, stream2));
+    checkCudaErrors(cudaStreamWaitEvent(stream1, memcpyEvent));
 
-    cudaMemsetAsync(d_c, 0, N * N * sizeof(int), stream3);
-    cudaEventRecord(memsetEvent, stream3);
-    cudaStreamWaitEvent(stream1, memsetEvent);
+    checkCudaErrors(cudaMemsetAsync(d_c, 0, N * N * sizeof(int), stream3));
+    checkCudaErrors(cudaEventRecord(memsetEvent, stream3));
+    checkCudaErrors(cudaStreamWaitEvent(stream1, memsetEvent));
 
     matrixMul << <blocks, threads, 0, stream1 >> > (d_a, d_b, d_c, N);
 
-    cudaMemcpyAsync(h_c, d_c, N * N * sizeof(int), cudaMemcpyDefault, stream1);
+    checkCudaErrors(cudaMemcpyAsync(h_c, d_c, N * N * sizeof(int), cudaMemcpyDefault, stream1));
 
-    cudaStreamEndCapture(stream1, &graph);
+    checkCudaErrors(cudaStreamEndCapture(stream1, &graph));
 
     cudaGraphNode_t* nodes = NULL;
     size_t numNodes = 0;
-    cudaGraphGetNodes(graph, nodes, &numNodes);
+    checkCudaErrors(cudaGraphGetNodes(graph, nodes, &numNodes));
     cout << "Num of nodes in the graph created using stream capture API = " << numNodes << endl;
 
     cudaGraphExec_t graphExec;
-    cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 
     cudaGraph_t clonedGraph;
     cudaGraphExec_t clonedGraphExec;
-    cudaGraphClone(&clonedGraph, graph);
-    cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphClone(&clonedGraph, graph));
+    checkCudaErrors(cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0));
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    
+
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
         cudaGraphLaunch(graphExec, streamForGraph);
@@ -112,27 +113,27 @@ void StreamCaptureMatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, in
     cout << "\nVerifying Cloned Graph ... " << endl;
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(clonedGraphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(clonedGraphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_a, h_b, h_c, N);
     }
     cout << "Done! Verifyied successfully" << endl;
 
     cout << "\nTime taken by using CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
 
-    cudaStreamSynchronize(streamForGraph);
-    cudaGraphExecDestroy(graphExec);
-    cudaGraphExecDestroy(clonedGraphExec);
-    cudaGraphDestroy(graph);
-    cudaGraphDestroy(clonedGraph);
-    cudaStreamDestroy(stream1);
-    cudaStreamDestroy(stream2);
-    cudaStreamDestroy(streamForGraph);
-    cudaEventDestroy(memcpyEvent);
-    cudaEventDestroy(memsetEvent);
-    cudaEventDestroy(forkStreamEvent);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaStreamSynchronize(streamForGraph));
+    checkCudaErrors(cudaGraphExecDestroy(graphExec));
+    checkCudaErrors(cudaGraphExecDestroy(clonedGraphExec));
+    checkCudaErrors(cudaGraphDestroy(graph));
+    checkCudaErrors(cudaGraphDestroy(clonedGraph));
+    checkCudaErrors(cudaStreamDestroy(stream1));
+    checkCudaErrors(cudaStreamDestroy(stream2));
+    checkCudaErrors(cudaStreamDestroy(streamForGraph));
+    checkCudaErrors(cudaEventDestroy(memcpyEvent));
+    checkCudaErrors(cudaEventDestroy(memsetEvent));
+    checkCudaErrors(cudaEventDestroy(forkStreamEvent));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
 }
 
@@ -165,9 +166,9 @@ int main() {
     h_c = new int[N * N];
 
     int* d_a, * d_b, * d_c;
-    cudaMalloc(&d_a, bytes);
-    cudaMalloc(&d_b, bytes);
-    cudaMalloc(&d_c, bytes);
+    checkCudaErrors(cudaMalloc(&d_a, bytes));
+    checkCudaErrors(cudaMalloc(&d_b, bytes));
+    checkCudaErrors(cudaMalloc(&d_c, bytes));
 
     init_matrix(h_a, N);
     init_matrix(h_b, N);
@@ -179,7 +180,7 @@ int main() {
     dim3 blocks(BLOCKS, BLOCKS);
 
     cout << "Normal Matrix Mul" << endl;
-    
+
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -188,7 +189,7 @@ int main() {
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++) {
         NormalMatrixMul(h_a, h_b, h_c, d_a, d_b, d_c, threads, blocks, N);
     }
-    
+
     cudaDeviceSynchronize();
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -197,19 +198,19 @@ int main() {
     cout << "\nTime taken without CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
 
     cout << "----------------------------------------------------" << endl;
-    
+
     cout << "Matrix Mul using CUDA GRAPHS (Stream Capture)" << endl;
-    
+
     StreamCaptureMatrixMul(h_a, h_b, h_c, d_a, d_b, d_c, threads, blocks, N);
 
     cout << "----------------------------------------------------\n" << endl;
     cout << "\nThe time is the average time of all the kernel launchs. The total kernel launches are " << GRAPH_LAUNCH_ITERATIONS << endl;
 
-    cudaFree(d_a);
-    cudaFree(d_b);
-    cudaFree(d_c);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaFree(d_a));
+    checkCudaErrors(cudaFree(d_b));
+    checkCudaErrors(cudaFree(d_c));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
     return 0;
 }
