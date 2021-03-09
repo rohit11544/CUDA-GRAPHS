@@ -2,7 +2,7 @@
 CUDA graph programs in C++
 
 Here are some programs which uses cuda graphs to increase the performance.
-Cuda graphs are used remove the overheds in launching the kernel as it already dose the work required to launch kernel. So, when there is a program which launchs the same kernel multiple times using cuda graphs will help in boosting the speed of program by reducing the kernel launch time. 
+Cuda graphs are used to remove the overheds in launching the kernel as it already dose the work required to launch kernel. So, when there is a program which launchs the same kernel multiple times using cuda graphs will help in boosting the speed of program by reducing the kernel launch time. 
 
 there are 2 ways to implement cuda graphs 
 * By stream capture (capture graphs)
