@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <vector>
+#include <helper_cuda.h>
 #define GRAPH_LAUNCH_ITERATIONS  300
 
 
@@ -50,7 +51,7 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     cudaGraphNode_t memcpyNode, kernelNode, memsetNode;
     double result_h = 0.0;
 
-    cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking);
+    checkCudaErrors(cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking));
 
     cudaKernelNodeParams kernelNodeParams = { 0 };
     cudaMemcpy3DParms memcpyParams = { 0 };
@@ -74,9 +75,9 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     memsetParams.width = N * N;
     memsetParams.height = 1;
 
-    cudaGraphCreate(&graph, 0);
-    cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams);
-    cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams);
+    checkCudaErrors(cudaGraphCreate(&graph, 0));
+    checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
+    checkCudaErrors(cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams));
     nodeDependencies.push_back(memsetNode);
     nodeDependencies.push_back(memcpyNode);
 
@@ -91,7 +92,7 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     memcpyParams.extent = make_cudaExtent(sizeof(int) * N * N, 1, 1);
     memcpyParams.kind = cudaMemcpyHostToDevice;
 
-    cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams);
+    checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
     nodeDependencies.push_back(memcpyNode);
 
     //Adding Kernal node
@@ -103,7 +104,7 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     kernelNodeParams.kernelParams = (void**)kernelArgs;
     kernelNodeParams.extra = NULL;
 
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams);
+    checkCudaErrors(cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams));
     nodeDependencies.clear();
     nodeDependencies.push_back(kernelNode);
 
@@ -118,22 +119,22 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     memcpyParams.extent = make_cudaExtent(sizeof(int) * N * N, 1, 1);
     memcpyParams.kind = cudaMemcpyDeviceToHost;
 
-    cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams);
+    checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams));
     nodeDependencies.clear();
     nodeDependencies.push_back(memcpyNode);
 
     cudaGraphNode_t* nodes = NULL;
     size_t numNodes = 0;
-    cudaGraphGetNodes(graph, nodes, &numNodes);
+    checkCudaErrors(cudaGraphGetNodes(graph, nodes, &numNodes));
     cout << "\nNum of nodes in the graph created manually = " << numNodes << endl;
 
     cudaGraphExec_t graphExec;
-    cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 
     cudaGraph_t clonedGraph;
     cudaGraphExec_t clonedGraphExec;
-    cudaGraphClone(&clonedGraph, graph);
-    cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphClone(&clonedGraph, graph));
+    checkCudaErrors(cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0));
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -142,8 +143,8 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
 
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(graphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_a, h_b, h_c, N);
     }
 
@@ -156,21 +157,21 @@ void cudaGraphAPImatrixMul(int* h_a, int* h_b, int* h_c, int* d_a, int* d_b, int
     cout << "Verifying Cloned Graph ..." << endl;
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(clonedGraphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(clonedGraphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_a, h_b, h_c, N);
     }
     cout << "Done! Verifyied successfully" << endl;
 
     cout << "\nTime taken by using CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
 
-    cudaGraphExecDestroy(graphExec);
-    cudaGraphExecDestroy(clonedGraphExec);
-    cudaGraphDestroy(graph);
-    cudaGraphDestroy(clonedGraph);
-    cudaStreamDestroy(streamForGraph);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaGraphExecDestroy(graphExec));
+    checkCudaErrors(cudaGraphExecDestroy(clonedGraphExec));
+    checkCudaErrors(cudaGraphDestroy(graph));
+    checkCudaErrors(cudaGraphDestroy(clonedGraph));
+    checkCudaErrors(cudaStreamDestroy(streamForGraph));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 }
 
 
@@ -205,9 +206,9 @@ int main() {
     init_matrix(h_b, N);
 
     int* d_a, * d_b, * d_c;
-    cudaMalloc(&d_a, bytes);
-    cudaMalloc(&d_b, bytes);
-    cudaMalloc(&d_c, bytes);
+    checkCudaErrors(cudaMalloc(&d_a, bytes));
+    checkCudaErrors(cudaMalloc(&d_b, bytes));
+    checkCudaErrors(cudaMalloc(&d_c, bytes));
 
     int THREADS = 32;
     int BLOCKS = (N + THREADS - 1) / THREADS;
@@ -225,28 +226,28 @@ int main() {
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++) {
         NormalMatrixMul(h_a, h_b, h_c, d_a, d_b, d_c, threads, blocks, N);
     }
-    
+
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
 
     cout << "\nTime taken without CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
-    
+
     cout << "----------------------------------------------------" << endl;
-    
+
     cout << "Matrix Mul using CUDA GRAPHS (Graph API)" << endl;
-    
+
     cudaGraphAPImatrixMul(h_a, h_b, h_c, d_a, d_b, d_c, threads, blocks, N);
 
     cout << "----------------------------------------------------\n" << endl;
     cout << "\nThe time is the average time of all the kernel launchs. The total kernel launches are " << GRAPH_LAUNCH_ITERATIONS << endl;
 
-    cudaFree(d_a);
-    cudaFree(d_b);
-    cudaFree(d_c);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaFree(d_a));
+    checkCudaErrors(cudaFree(d_b));
+    checkCudaErrors(cudaFree(d_c));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
     return 0;
 }
