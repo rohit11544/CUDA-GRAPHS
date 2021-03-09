@@ -1,6 +1,7 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include <iostream>
+#include <helper_cuda.h>
 #include <vector>
 
 #define SIZE 1024
@@ -55,7 +56,7 @@ void cudaGraphAPIsumReduction(int* h_v, int* h_v_r, int* d_v, int* d_v_r, int TB
 	cudaGraphNode_t memcpyNode, kernelNode, memsetNode;
 	double result_h = 0.0;
 
-	cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking);
+	checkCudaErrors(cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking));
 
 	cudaKernelNodeParams kernelNodeParams = { 0 };
 	cudaMemcpy3DParms memcpyParams = { 0 };
@@ -79,9 +80,9 @@ void cudaGraphAPIsumReduction(int* h_v, int* h_v_r, int* d_v, int* d_v_r, int TB
 	memsetParams.width = n;
 	memsetParams.height = 1;
 
-	cudaGraphCreate(&graph, 0);
-	cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams);
-	cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams);
+	checkCudaErrors(cudaGraphCreate(&graph, 0));
+	checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
+	checkCudaErrors(cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams));
 	nodeDependencies.push_back(memsetNode);
 	nodeDependencies.push_back(memcpyNode);
 
@@ -95,7 +96,7 @@ void cudaGraphAPIsumReduction(int* h_v, int* h_v_r, int* d_v, int* d_v_r, int TB
 	kernelNodeParams.kernelParams = (void**)kernelArgs;
 	kernelNodeParams.extra = NULL;
 
-	cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams);
+	checkCudaErrors(cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams));
 	nodeDependencies.clear();
 	nodeDependencies.push_back(kernelNode);
 
@@ -109,7 +110,7 @@ void cudaGraphAPIsumReduction(int* h_v, int* h_v_r, int* d_v, int* d_v_r, int TB
 	kernelNodeParams.kernelParams = (void**)kernelArgs2;
 	kernelNodeParams.extra = NULL;
 
-	cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams);
+	checkCudaErrors(cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams));
 	nodeDependencies.clear();
 	nodeDependencies.push_back(kernelNode);
 
@@ -124,59 +125,59 @@ void cudaGraphAPIsumReduction(int* h_v, int* h_v_r, int* d_v, int* d_v_r, int TB
 	memcpyParams.extent = make_cudaExtent(sizeof(int) * n, 1, 1);
 	memcpyParams.kind = cudaMemcpyDeviceToHost;
 
-	cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams);
+	checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams));
 	nodeDependencies.clear();
 	nodeDependencies.push_back(memcpyNode);
 
 	cudaGraphNode_t* nodes = NULL;
 	size_t numNodes = 0;
-	cudaGraphGetNodes(graph, nodes, &numNodes);
+	checkCudaErrors(cudaGraphGetNodes(graph, nodes, &numNodes));
 	cout << "Num of nodes in the graph created manually = " << numNodes << endl;
 
 	cudaGraphExec_t graphExec;
-	cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+	checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 
 	cudaGraph_t clonedGraph;
 	cudaGraphExec_t clonedGraphExec;
-	cudaGraphClone(&clonedGraph, graph);
-	cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0);
+	checkCudaErrors(cudaGraphClone(&clonedGraph, graph));
+	checkCudaErrors(cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0));
 
 	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start);
-	
+	checkCudaErrors(cudaEventCreate(&start));
+	checkCudaErrors(cudaEventCreate(&stop));
+	checkCudaErrors(cudaEventRecord(start));
+
 	for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
 	{
-		cudaGraphLaunch(graphExec, streamForGraph);
-		cudaStreamSynchronize(streamForGraph);
+		checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
+		checkCudaErrors(cudaStreamSynchronize(streamForGraph));
 		verify_result(h_v, h_v_r, n);
 	}
-	
-	cudaDeviceSynchronize();
-	cudaEventRecord(stop);
-	cudaEventSynchronize(stop);
+
+	checkCudaErrors(cudaDeviceSynchronize());
+	checkCudaErrors(cudaEventRecord(stop));
+	checkCudaErrors(cudaEventSynchronize(stop));
 	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, start, stop);
+	checkCudaErrors(cudaEventElapsedTime(&milliseconds, start, stop));
 
 	cout << "Verifying Cloned Graph ..." << endl;
 	for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
 	{
-		cudaGraphLaunch(clonedGraphExec, streamForGraph);
-		cudaStreamSynchronize(streamForGraph);
+		checkCudaErrors(cudaGraphLaunch(clonedGraphExec, streamForGraph));
+		checkCudaErrors(cudaStreamSynchronize(streamForGraph));
 		verify_result(h_v, h_v_r, n);
 	}
 	cout << "Done! Verifyied successfully" << endl;
 
 	cout << "\nTime taken by using CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
 
-	cudaGraphExecDestroy(graphExec);
-	cudaGraphExecDestroy(clonedGraphExec);
-	cudaGraphDestroy(graph);
-	cudaGraphDestroy(clonedGraph);
-	cudaStreamDestroy(streamForGraph);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	checkCudaErrors(cudaGraphExecDestroy(graphExec));
+	checkCudaErrors(cudaGraphExecDestroy(clonedGraphExec));
+	checkCudaErrors(cudaGraphDestroy(graph));
+	checkCudaErrors(cudaGraphDestroy(clonedGraph));
+	checkCudaErrors(cudaStreamDestroy(streamForGraph));
+	checkCudaErrors(cudaEventDestroy(start));
+	checkCudaErrors(cudaEventDestroy(stop));
 
 }
 
@@ -206,46 +207,46 @@ int main() {
 
 	h_v = (int*)malloc(bytes);
 	h_v_r = (int*)malloc(bytes);
-	cudaMalloc(&d_v, bytes);
-	cudaMalloc(&d_v_r, bytes);
+	checkCudaErrors(cudaMalloc(&d_v, bytes));
+	checkCudaErrors(cudaMalloc(&d_v_r, bytes));
 
 	initialize_vector(h_v, n);
 
 	int	TB_SIZE = SIZE;
 	int GRID_SIZE = (n + TB_SIZE - 1) / TB_SIZE;
-	
+
 	cout << "Normal Sum Reduction\n" << endl;
-	
+
 	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start);
-	
+	checkCudaErrors(cudaEventCreate(&start));
+	checkCudaErrors(cudaEventCreate(&stop));
+	checkCudaErrors(cudaEventRecord(start));
+
 	for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++) {
 		sumReduction(h_v, h_v_r, d_v, d_v_r, TB_SIZE, GRID_SIZE, n);
-		cudaStreamSynchronize(0);
+		checkCudaErrors(cudaStreamSynchronize(0));
 	}
-	
-	cudaEventRecord(stop);
-	cudaEventSynchronize(stop);
-	float milliseconds = 0;
-	cudaEventElapsedTime(&milliseconds, start, stop);
 
-	cout << "Time taken without CUDA GRAPH in ms : " << milliseconds/ GRAPH_LAUNCH_ITERATIONS << endl;
+	checkCudaErrors(cudaEventRecord(stop));
+	checkCudaErrors(cudaEventSynchronize(stop));
+	float milliseconds = 0;
+	checkCudaErrors(cudaEventElapsedTime(&milliseconds, start, stop));
+
+	cout << "Time taken without CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
 
 	cout << "----------------------------------------------------\n" << endl;
 
 	cout << "Sum Reduction using CUDA GRAPHS (Graph API)\n" << endl;
 
 	cudaGraphAPIsumReduction(h_v, h_v_r, d_v, d_v_r, TB_SIZE, GRID_SIZE, n);
-	
+
 	cout << "----------------------------------------------------\n" << endl;
 	cout << "\nThe time is the average time of all the kernel launchs. The total kernel launches are " << GRAPH_LAUNCH_ITERATIONS << endl;
-	
-	cudaFree(d_v);
-	cudaFree(d_v_r);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+
+	checkCudaErrors(cudaFree(d_v));
+	checkCudaErrors(cudaFree(d_v_r));
+	checkCudaErrors(cudaEventDestroy(start));
+	checkCudaErrors(cudaEventDestroy(stop));
 	return 0;
 }
 
