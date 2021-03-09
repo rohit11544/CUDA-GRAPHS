@@ -2,6 +2,8 @@
 #include <device_launch_parameters.h>
 #include <iostream>
 #include <vector>
+#include <helper_cuda.h>
+
 #define GRAPH_LAUNCH_ITERATIONS  300
 
 using std::cout;
@@ -64,7 +66,7 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
     cudaGraphNode_t memcpyNode, kernelNode, memsetNode;
     double result_h = 0.0;
 
-    cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking);
+    checkCudaErrors(cudaStreamCreateWithFlags(&streamForGraph, cudaStreamNonBlocking));
 
     cudaKernelNodeParams kernelNodeParams = { 0 };
     cudaMemcpy3DParms memcpyParams = { 0 };
@@ -88,9 +90,9 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
     memsetParams.width = n;
     memsetParams.height = 1;
 
-    cudaGraphCreate(&graph, 0);
-    cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams);
-    cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams);
+    checkCudaErrors(cudaGraphCreate(&graph, 0));
+    checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, NULL, 0, &memcpyParams));
+    checkCudaErrors(cudaGraphAddMemsetNode(&memsetNode, graph, NULL, 0, &memsetParams));
     nodeDependencies.push_back(memsetNode);
     nodeDependencies.push_back(memcpyNode);
 
@@ -103,7 +105,7 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
     kernelNodeParams.kernelParams = (void**)kernelArgs;
     kernelNodeParams.extra = NULL;
 
-    cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams);
+    checkCudaErrors(cudaGraphAddKernelNode(&kernelNode, graph, nodeDependencies.data(), nodeDependencies.size(), &kernelNodeParams));
     nodeDependencies.clear();
     nodeDependencies.push_back(kernelNode);
 
@@ -118,22 +120,22 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
     memcpyParams.extent = make_cudaExtent(sizeof(int) * n, 1, 1);
     memcpyParams.kind = cudaMemcpyDeviceToHost;
 
-    cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams);
+    checkCudaErrors(cudaGraphAddMemcpyNode(&memcpyNode, graph, nodeDependencies.data(), nodeDependencies.size(), &memcpyParams));
     nodeDependencies.clear();
     nodeDependencies.push_back(memcpyNode);
 
     cudaGraphNode_t* nodes = NULL;
     size_t numNodes = 0;
-    cudaGraphGetNodes(graph, nodes, &numNodes);
+    checkCudaErrors(cudaGraphGetNodes(graph, nodes, &numNodes));
     cout << "\nNum of nodes in the graph created manually = " << numNodes << endl;
 
     cudaGraphExec_t graphExec;
-    cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphInstantiate(&graphExec, graph, NULL, NULL, 0));
 
     cudaGraph_t clonedGraph;
     cudaGraphExec_t clonedGraphExec;
-    cudaGraphClone(&clonedGraph, graph);
-    cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0);
+    checkCudaErrors(cudaGraphClone(&clonedGraph, graph));
+    checkCudaErrors(cudaGraphInstantiate(&clonedGraphExec, clonedGraph, NULL, NULL, 0));
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -142,11 +144,11 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
 
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(graphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(graphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_array, h_mask, h_result, n);
     }
-    
+
     cudaDeviceSynchronize();
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -156,21 +158,21 @@ void cudaGraphAPIconvolution(int* h_array, int* h_mask, int* h_result, int* d_ar
     cout << "Verifying Cloned Graph ..." << endl;
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++)
     {
-        cudaGraphLaunch(clonedGraphExec, streamForGraph);
-        cudaStreamSynchronize(streamForGraph);
+        checkCudaErrors(cudaGraphLaunch(clonedGraphExec, streamForGraph));
+        checkCudaErrors(cudaStreamSynchronize(streamForGraph));
         verify_result(h_array, h_mask, h_result, n);
     }
     cout << "Done! Verifyied successfully" << endl;
 
     cout << "\nTime taken by using CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
-    
-    cudaGraphExecDestroy(graphExec);
-    cudaGraphExecDestroy(clonedGraphExec);
-    cudaGraphDestroy(graph);
-    cudaGraphDestroy(clonedGraph);
-    cudaStreamDestroy(streamForGraph);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+
+    checkCudaErrors(cudaGraphExecDestroy(graphExec));
+    checkCudaErrors(cudaGraphExecDestroy(clonedGraphExec));
+    checkCudaErrors(cudaGraphDestroy(graph));
+    checkCudaErrors(cudaGraphDestroy(clonedGraph));
+    checkCudaErrors(cudaStreamDestroy(streamForGraph));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
 
 }
 
@@ -197,9 +199,9 @@ int main() {
     int* h_result = new int[n];
 
     int* d_array, * d_result;
-    cudaMalloc(&d_array, bytes_n);
-    cudaMalloc(&d_result, bytes_n);
-    
+    checkCudaErrors(cudaMalloc(&d_array, bytes_n));
+    checkCudaErrors(cudaMalloc(&d_result, bytes_n));
+
     initialize_vector(h_array, n);
     initialize_vector(h_mask, MASK_LENGTH);
     cudaMemcpyToSymbol(mask, h_mask, bytes_m);
@@ -209,7 +211,7 @@ int main() {
     int GRID = (n + THREADS - 1) / THREADS;
 
     cout << "Normal Convolution" << endl;
-    
+
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -218,30 +220,30 @@ int main() {
     for (int i = 0; i < GRAPH_LAUNCH_ITERATIONS; i++) {
         NormalConvolution(h_array, h_mask, h_result, d_array, d_result, n, THREADS, GRID, bytes_n);
     }
-    
+
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float milliseconds = 0;
     cudaEventElapsedTime(&milliseconds, start, stop);
 
     cout << "\nTime taken without CUDA GRAPH in ms : " << milliseconds / GRAPH_LAUNCH_ITERATIONS << endl;
-    
+
     cout << "----------------------------------------------------" << endl;
-    
+
     cout << "Convolution using CUDA GRAPHS (Graph API)" << endl;
-    
+
     cudaGraphAPIconvolution(h_array, h_mask, h_result, d_array, d_result, n, THREADS, GRID, bytes_n, bytes_m);
-    
+
     cout << "----------------------------------------------------\n" << endl;
     cout << "\nThe time is the average time of all the kernel launchs. The total kernel launches are " << GRAPH_LAUNCH_ITERATIONS << endl;
-    
-    
+
+
     delete[] h_array;
     delete[] h_result;
     delete[] h_mask;
-    cudaFree(d_result);
-    cudaFree(d_array);
-    cudaEventDestroy(start);
-    cudaEventDestroy(stop);
+    checkCudaErrors(cudaFree(d_result));
+    checkCudaErrors(cudaFree(d_array));
+    checkCudaErrors(cudaEventDestroy(start));
+    checkCudaErrors(cudaEventDestroy(stop));
     return 0;
 }
